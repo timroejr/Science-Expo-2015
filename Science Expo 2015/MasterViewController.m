@@ -8,10 +8,15 @@
 
 #import "MasterViewController.h"
 #import "DetailViewController.h"
+#import <MetaWear/MetaWear.h>
 
 @interface MasterViewController ()
 
-@property NSMutableArray *objects;
+@property (nonatomic, strong) NSArray *devices;
+@property (strong, nonatomic) UIActivityIndicatorView *activity;
+@property (weak, nonatomic) IBOutlet UISwitch *scanningSwitch;
+
+
 @end
 
 @implementation MasterViewController
@@ -27,6 +32,10 @@
 
     UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
     self.navigationItem.rightBarButtonItem = addButton;
+    
+    self.activity = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+    self.activity.center = CGPointMake(95, 138);
+    [self.tableView addSubview:self.activity];
 }
 
 - (void)didReceiveMemoryWarning {
@@ -34,24 +43,37 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)insertNewObject:(id)sender {
-    if (!self.objects) {
-        self.objects = [[NSMutableArray alloc] init];
-    }
-    [self.objects insertObject:[NSDate date] atIndex:0];
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    [self.tableView insertRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+-(void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self setScanning:self.scanningSwitch.on];
 }
+
+-(void)viewWillDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    [self setScanning:NO];
+}
+
+
+-(void)setScanning:(BOOL)on {
+    if (on) {
+        [self.activity startAnimating];
+        [[MBLMetaWearManager sharedManager] startScanForMetaWearsAllowDuplicates:YES handler:^(NSArray *array) {
+            self.devices = array;
+            [self.tableView reloadData];
+        }];
+    } else {
+        [self.activity stopAnimating];
+        [[MBLMetaWearManager sharedManager] stopScanForMetaWears];
+    }
+}
+
+-(IBAction)scanningSwitchPressed:(UISwitch *)sender {
+    [self setScanning:sender.on];
+}
+
 
 #pragma mark - Segues
 
-- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
-    if ([[segue identifier] isEqualToString:@"showDetail"]) {
-        NSIndexPath *indexPath = [self.tableView indexPathForSelectedRow];
-        NSDate *object = self.objects[indexPath.row];
-        [[segue destinationViewController] setDetailItem:object];
-    }
-}
 
 #pragma mark - Table View
 
@@ -60,29 +82,41 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.objects.count;
+    return self.devices.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell" forIndexPath:indexPath];
-
-    NSDate *object = self.objects[indexPath.row];
-    cell.textLabel.text = [object description];
+    NSString *identifier = @"Cell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier forIndexPath:indexPath];
+    MBLMetaWear *cur = self.devices[indexPath.row];
+    
+    UILabel *uuid = (UILabel *)[cell viewWithTag:2];
+    uuid.text = cur.identifier.UUIDString;
+    
+    UILabel *connected = (UILabel *)[cell viewWithTag:3];
+    if (cur.state == CBPeripheralStateConnected) {
+        [connected setHidden:NO];
+    } else {
+        [connected setHidden:YES];
+    }
+    
     return cell;
 }
 
-- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
-    // Return NO if you do not want the specified item to be editable.
-    return YES;
+-(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    MBLMetaWear *selected = self.devices[indexPath.row];
+    [self performSegueWithIdentifier:@"DeviceDetails" sender:selected];
 }
 
-- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (editingStyle == UITableViewCellEditingStyleDelete) {
-        [self.objects removeObjectAtIndex:indexPath.row];
-        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-    } else if (editingStyle == UITableViewCellEditingStyleInsert) {
-        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view.
-    }
+-(NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return @"Devices";
 }
+
+-(void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    DetailViewController *destination = segue.destinationViewController;
+    destination.device = sender;
+}
+
 
 @end

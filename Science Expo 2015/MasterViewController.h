@@ -7,6 +7,7 @@
 //
 
 #import <UIKit/UIKit.h>
+#import <MetaWear/MetaWear.h>
 
 @interface MasterViewController : UITableViewController
 
